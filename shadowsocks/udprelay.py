@@ -83,10 +83,23 @@ def client_key(source_addr, server_af):
     return '%s:%s:%d' % (source_addr[0], source_addr[1], server_af)
 
 
+class UDPLogging(object):
+
+    def __getattribute__(self, item):
+        def f(*argv):
+            pass
+        import config
+        if config.LOG_UDP:
+            return getattr(logging, item, f)
+        else:
+            return f
+
+
 class UDPRelay(object):
 
     def __init__(self, config, dns_resolver, is_local, stat_callback=None):
         self._config = config
+        self._logging = UDPLogging()
         if 'relay_info' not in self._config:
             self._config['relay_info'] = None
         if is_local:
@@ -139,8 +152,8 @@ class UDPRelay(object):
             server_port = random.choice(server_port)
         if isinstance(server, list):
             server = random.choice(server)
-        logging.debug('U[%d] UDP Chosen server: %s:%d' %
-                      (self._config['server_port'], server, server_port))
+        self._logging.debug('U[%d] UDP Chosen server: %s:%d' %
+                            (self._config['server_port'], server, server_port))
         return server, server_port
 
     def _close_client(self, client):
@@ -157,8 +170,8 @@ class UDPRelay(object):
         data, r_addr = server.recvfrom(BUF_SIZE)
         client_address = r_addr[0]
         if not data:
-            logging.debug('U[%d] UDP handle_server: data is empty' %
-                          self._config['server_port'])
+            self._logging.debug('U[%d] UDP handle_server: data is empty' %
+                                self._config['server_port'])
         if self._stat_callback:
             self._stat_callback(self._listen_port, len(data))
 
@@ -172,7 +185,8 @@ class UDPRelay(object):
             else:
                 frag = common.ord(data[2])
                 if frag != 0:
-                    logging.warning('UDP drop a message since frag is not 0')
+                    self._logging.warning(
+                        'UDP drop a message since frag is not 0')
                     return
                 else:
                     data = data[3:]
@@ -184,19 +198,19 @@ class UDPRelay(object):
                                                     self._method,
                                                     data)
             except Exception:
-                logging.debug(
+                self._logging.debug(
                     'U[%d] UDP handle_server: decrypt data failed' %
                     self._config['server_port'])
                 return
             if not data:
-                logging.debug(
+                self._logging.debug(
                     'U[%d] UDP handle_server: data is empty after decrypt' %
                     self._config['server_port'])
                 return
 
         header_result = parse_header(data)
         if header_result is None:
-            logging.debug(
+            self._logging.debug(
                 'U[%d] UDP handle_server: header is invalid' %
                 self._config['server_port'])
             return
@@ -207,28 +221,34 @@ class UDPRelay(object):
             if (self._config['firewall_mode'] == 'blacklist') == \
                     (dest_port in self._config['firewall_ports']):
                 # Remote port blocked by firewall, end this connection
-                logging.warning('U[%d] UDP PORT BANNED: RP[%d] A[%s-->%s]' % (
-                    self._config['server_port'], dest_port,
-                    client_address, common.to_str(dest_addr)
-                ))
+
+                self._logging.warning(
+                    'U[%d] UDP PORT BANNED: RP[%d] A[%s-->%s]' %
+                    (self._config['server_port'],
+                     dest_port,
+                     client_address,
+                     common.to_str(dest_addr)))
                 return
 
         if self._config['relay_info']:
             server_addr, server_port = self._config['relay_info']['address'], self._config['relay_info']['port']
-            logging.info('U[%d] UDP CONN: WITH RELAY[%s:%d] A[%s-->%s:%d]' % (
-                self._config['server_port'],
-                server_addr, server_port, client_address,
-                common.to_str(dest_addr), dest_port
-            ))
+            self._logging.info(
+                'U[%d] UDP CONN: WITH RELAY[%s:%d] A[%s-->%s:%d]' %
+                (self._config['server_port'],
+                 server_addr,
+                 server_port,
+                 client_address,
+                 common.to_str(dest_addr),
+                 dest_port))
         else:
             if self._is_local:
-                logging.info('U[%d] UDP CONN: DEST[%s:%d]' % (
+                self._logging.info('U[%d] UDP CONN: DEST[%s:%d]' % (
                     self._config['server_port'],
                     common.to_str(dest_addr), dest_port
                 ))
                 server_addr, server_port = self._get_a_server()
             else:
-                logging.info('U[%d] UDP CONN: A[%s-->%s:%d]' % (
+                self._logging.info('U[%d] UDP CONN: A[%s-->%s:%d]' % (
                     self._config['server_port'], client_address,
                     common.to_str(dest_addr), dest_port
                 ))
@@ -253,8 +273,11 @@ class UDPRelay(object):
             # TODO async getaddrinfo
             if self._forbidden_iplist:
                 if common.to_str(sa[0]) in self._forbidden_iplist:
-                    logging.debug('U[%d] IP %s is in forbidden list, drop' % (
-                        self._config['server_port'], common.to_str(sa[0])))
+                    self._logging.debug(
+                        'U[%d] IP %s is in forbidden list, drop' %
+                        (self._config['server_port'],
+                         common.to_str(
+                            sa[0])))
                     # drop
                     return
             client = socket.socket(af, socktype, proto)
@@ -271,7 +294,7 @@ class UDPRelay(object):
                 data = cryptor.encrypt_all_m(key, iv, m, self._method, data,
                                              self._crypto_path)
             except Exception:
-                logging.debug("UDP handle_server: encrypt data failed")
+                self._logging.debug("UDP handle_server: encrypt data failed")
                 return
             if not data:
                 return
@@ -301,8 +324,8 @@ class UDPRelay(object):
     def _handle_client(self, sock):
         data, r_addr = sock.recvfrom(BUF_SIZE)
         if not data:
-            logging.debug('U[%d] UDP handle_client: data is empty' %
-                          self._config['server_port'])
+            self._logging.debug('U[%d] UDP handle_client: data is empty' %
+                                self._config['server_port'])
             return
         if self._stat_callback:
             self._stat_callback(self._listen_port, len(data))
@@ -317,7 +340,7 @@ class UDPRelay(object):
                                                self._method, data,
                                                self._crypto_path)
             except Exception:
-                logging.debug("UDP handle_client: encrypt data failed")
+                self._logging.debug("UDP handle_client: encrypt data failed")
                 return
             if not response:
                 return
@@ -328,7 +351,7 @@ class UDPRelay(object):
                                                     self._method, data,
                                                     self._crypto_path)
             except Exception:
-                logging.debug('UDP handle_client: decrypt data failed')
+                self._logging.debug('UDP handle_client: decrypt data failed')
                 return
             if not data:
                 return
@@ -347,8 +370,8 @@ class UDPRelay(object):
             response = data
         client_addr = self._client_fd_to_server_addr.get(sock.fileno())
         if client_addr:
-            logging.debug("send udp response to %s:%d"
-                          % (client_addr[0], client_addr[1]))
+            self._logging.debug("send udp response to %s:%d"
+                                % (client_addr[0], client_addr[1]))
             self._server_socket.sendto(response, client_addr)
         else:
             # this packet is from somewhere else we know
@@ -370,13 +393,13 @@ class UDPRelay(object):
     def handle_event(self, sock, fd, event):
         if sock == self._server_socket:
             if event & eventloop.POLL_ERR:
-                logging.error('U[%d] UDP server_socket err' %
-                              self._config['server_port'])
+                self._logging.error('U[%d] UDP server_socket err' %
+                                    self._config['server_port'])
             self._handle_server()
         elif sock and (fd in self._sockets):
             if event & eventloop.POLL_ERR:
-                logging.error('U[%d] UDP client_socket err' %
-                              self._config['server_port'])
+                self._logging.error('U[%d] UDP client_socket err' %
+                                    self._config['server_port'])
             self._handle_client(sock)
 
     def handle_periodic(self):
@@ -386,14 +409,15 @@ class UDPRelay(object):
                 self._server_socket = None
                 for sock in self._sockets:
                     sock.close()
-                logging.info('U[%d] UDP port %d closed' %
-                             (self._config['server_port'], self._listen_port))
+                self._logging.info(
+                    'U[%d] UDP port %d closed' %
+                    (self._config['server_port'], self._listen_port))
         self._cache.sweep()
         self._client_fd_to_server_addr.sweep()
         self._dns_cache.sweep()
 
     def close(self, next_tick=False):
-        logging.debug('U[%d] UDP closed' % self._config['server_port'])
+        self._logging.debug('U[%d] UDP closed' % self._config['server_port'])
         self._closed = True
         if not next_tick:
             if self._eventloop:

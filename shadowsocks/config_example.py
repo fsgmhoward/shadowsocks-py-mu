@@ -118,6 +118,10 @@ LOG_ENABLE = True
 # Available Log Level: logging.NOTSET|DEBUG|INFO|WARNING|ERROR|CRITICAL
 LOG_LEVEL = logging.INFO
 LOG_FILE = 'shadowsocks.log'
+# Set whether TCP connections and/or UDP connections are logged
+# Logging UDP connections are not recommended as log files can be very large
+LOG_TCP = True
+LOG_UDP = False
 # The following format is the one suggested for debugging
 # LOG_FORMAT = '%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s'
 LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'

@@ -123,10 +123,23 @@ class NoAcceptableMethods(Exception):
     pass
 
 
+class TCPLogging(object):
+
+    def __getattribute__(self, item):
+        def f(*argv):
+            pass
+        import config
+        if config.LOG_TCP:
+            return getattr(logging, item, f)
+        else:
+            return f
+
+
 class TCPRelayHandler(object):
 
     def __init__(self, server, fd_to_handlers, loop, local_sock, config,
                  dns_resolver, is_local):
+        self._logging = TCPLogging()
         self._server = server
         self._fd_to_handlers = fd_to_handlers
         self._loop = loop
@@ -181,7 +194,7 @@ class TCPRelayHandler(object):
             server_port = random.choice(server_port)
         if isinstance(server, list):
             server = random.choice(server)
-        logging.debug('chosen server: %s:%d', server, server_port)
+        self._logging.debug('chosen server: %s:%d', server, server_port)
         return server, server_port
 
     def _update_activity(self, data_len=0):
@@ -255,14 +268,14 @@ class TCPRelayHandler(object):
                 self._data_to_write_to_remote.append(data)
                 self._update_stream(STREAM_UP, WAIT_STATUS_WRITING)
             else:
-                logging.error('write_all_to_sock:unknown socket')
+                self._logging.error('write_all_to_sock:unknown socket')
         else:
             if sock == self._local_sock:
                 self._update_stream(STREAM_DOWN, WAIT_STATUS_READING)
             elif sock == self._remote_sock:
                 self._update_stream(STREAM_UP, WAIT_STATUS_READING)
             else:
-                logging.error('write_all_to_sock:unknown socket')
+                self._logging.error('write_all_to_sock:unknown socket')
         return True
 
     def _handle_stage_connecting(self, data, original_data):
@@ -302,7 +315,7 @@ class TCPRelayHandler(object):
                     self._update_stream(STREAM_UP, WAIT_STATUS_READWRITING)
                 elif eventloop.errno_from_exception(e) == errno.ENOTCONN:
                     self._fastopen_connected = False
-                    logging.error('fast open not supported on this OS')
+                    self._logging.error('fast open not supported on this OS')
                     self._config['fast_open'] = False
                     self.destroy()
                 else:
@@ -333,8 +346,8 @@ class TCPRelayHandler(object):
             if self._is_local:
                 cmd = common.ord(data[1])
                 if cmd == CMD_UDP_ASSOCIATE:
-                    logging.debug('U[%d] UDP associate' %
-                                  self._config['server_port'])
+                    self._logging.debug('U[%d] UDP associate' %
+                                        self._config['server_port'])
                     if self._local_sock.family == socket.AF_INET6:
                         # Second byte is status, 0x00 for means 'request granted'
                         # Third byte is RSV (always 0x00)
@@ -354,8 +367,8 @@ class TCPRelayHandler(object):
                     # just trim VER CMD RSV
                     data = data[3:]
                 else:
-                    logging.error('U[%d] Unknown command %d',
-                                  self._config['server_port'], cmd)
+                    self._logging.error('U[%d] Unknown command %d',
+                                        self._config['server_port'], cmd)
                     self.destroy()
                     return
 
@@ -371,16 +384,15 @@ class TCPRelayHandler(object):
                 if (self._config['firewall_mode'] == 'blacklist') == \
                         (remote_port in self._config['firewall_ports']):
                     # Remote port blocked by firewall, end this connection
-                    logging.warning('U[%d] TCP PORT BANNED: RP[%d] A[%s-->%s]' % (
-                        self._config['server_port'], remote_port,
-                        addr, common.to_str(remote_addr)
-                    ))
+                    self._logging.warning(
+                        'U[%d] TCP PORT BANNED: RP[%d] A[%s-->%s]' %
+                        (self._config['server_port'], remote_port, addr, common.to_str(remote_addr)))
                     return
 
             if self._config['relay_info']:
                 relay_addr = self._config['relay_info']['address']
                 relay_port = self._config['relay_info']['port']
-                logging.info(
+                self._logging.info(
                     'U[%d] TCP CONN: WITH RELAY[%s:%d] A[%s-->%s:%d]' % (
                         self._config['server_port'], relay_addr, relay_port,
                         addr, common.to_str(remote_addr), remote_port
@@ -391,12 +403,12 @@ class TCPRelayHandler(object):
                 remote_port = relay_port
             else:
                 if self._is_local:
-                    logging.info('U[%d] TCP CONN: DEST[%s:%d]' % (
+                    self._logging.info('U[%d] TCP CONN: DEST[%s:%d]' % (
                         self._config['server_port'],
                         common.to_str(remote_addr), remote_port
                     ))
                 else:
-                    logging.info('U[%d] TCP CONN: A[%s-->%s:%d]' % (
+                    self._logging.info('U[%d] TCP CONN: A[%s-->%s:%d]' % (
                         self._config['server_port'], addr,
                         common.to_str(remote_addr), remote_port
                     ))
@@ -453,8 +465,8 @@ class TCPRelayHandler(object):
     def _handle_dns_resolved(self, result, error):
         if error:
             addr, port = self._local_sock.getpeername()[:2]
-            logging.error('%s when handling connection from %s:%d' %
-                          (error, addr, port))
+            self._logging.error('%s when handling connection from %s:%d' %
+                                (error, addr, port))
             self.destroy()
             return
         if not (result and result[1]):
@@ -522,16 +534,16 @@ class TCPRelayHandler(object):
         #
         # Currently, only socks5 with NO_AUTH (i.e. X'00') is supported
         if len(data) < 3:
-            logging.warning('method selection header too short')
+            self._logging.warning('method selection header too short')
             raise BadSocksHeader
         socks_version = common.ord(data[0])
         if socks_version != 5:
-            logging.warning('unsupported SOCKS protocol version ' +
-                            str(socks_version))
+            self._logging.warning('unsupported SOCKS protocol version ' +
+                                  str(socks_version))
             raise BadSocksHeader
         nmethods = common.ord(data[1])
         if nmethods < 1 or len(data) != nmethods + 2:
-            logging.warning('NMETHODS and number of METHODS mismatch')
+            self._logging.warning('NMETHODS and number of METHODS mismatch')
             raise BadSocksHeader
         noauth_exist = False
         for method in data[2:]:
@@ -539,8 +551,8 @@ class TCPRelayHandler(object):
                 noauth_exist = True
                 break
         if not noauth_exist:
-            logging.warning('none of SOCKS METHOD\'s '
-                            'requested by client is supported')
+            self._logging.warning('none of SOCKS METHOD\'s '
+                                  'requested by client is supported')
             raise NoAcceptableMethods
 
     def _handle_stage_init(self, data):
@@ -662,9 +674,9 @@ class TCPRelayHandler(object):
             self._update_stream(STREAM_UP, WAIT_STATUS_READING)
 
     def _on_local_error(self):
-        logging.debug('got local error')
+        self._logging.debug('got local error')
         if self._local_sock:
-            logging.error(
+            self._logging.error(
                 'U[%d] %s' %
                 (self._config['server_port'],
                  eventloop.get_sock_error(
@@ -672,9 +684,9 @@ class TCPRelayHandler(object):
         self.destroy()
 
     def _on_remote_error(self):
-        logging.debug('got remote error')
+        self._logging.debug('got remote error')
         if self._remote_sock:
-            logging.error(
+            self._logging.error(
                 'U[%d] %s' %
                 (self._config['server_port'],
                  eventloop.get_sock_error(
@@ -685,7 +697,7 @@ class TCPRelayHandler(object):
     def handle_event(self, sock, event):
         # handle all events in this handler and dispatch them to methods
         if self._stage == STAGE_DESTROYED:
-            logging.debug('ignore handle_event: destroyed')
+            self._logging.debug('ignore handle_event: destroyed')
             return
         # order is important
         if sock == self._remote_sock:
@@ -711,15 +723,16 @@ class TCPRelayHandler(object):
             if event & eventloop.POLL_OUT:
                 self._on_local_write()
         else:
-            logging.warning('unknown socket')
+            self._logging.warning('unknown socket')
 
     def _log_error(self, e):
         if self._local_sock:
             addr, port = self._local_sock.getpeername()[:2]
-            logging.error('U[%d] %s when handling connection from %s:%d' %
-                          (self._config['server_port'], e, addr, port))
+            self._logging.error(
+                'U[%d] %s when handling connection from %s:%d' %
+                (self._config['server_port'], e, addr, port))
         else:
-            logging.error(
+            self._logging.error(
                 'U[%d] Unknown TCP error occurred' %
                 self._config['server_port'])
 
@@ -733,22 +746,22 @@ class TCPRelayHandler(object):
         # introduced! mostly likely memory leaks, etc
         if self._stage == STAGE_DESTROYED:
             # this couldn't happen
-            logging.debug('already destroyed')
+            self._logging.debug('already destroyed')
             return
         self._stage = STAGE_DESTROYED
         if self._remote_address:
-            logging.debug('destroy: %s:%d' %
-                          self._remote_address)
+            self._logging.debug('destroy: %s:%d' %
+                                self._remote_address)
         else:
-            logging.debug('destroy')
+            self._logging.debug('destroy')
         if self._remote_sock:
-            logging.debug('destroying remote')
+            self._logging.debug('destroying remote')
             self._loop.remove(self._remote_sock)
             del self._fd_to_handlers[self._remote_sock.fileno()]
             self._remote_sock.close()
             self._remote_sock = None
         if self._local_sock:
-            logging.debug('destroying local')
+            self._logging.debug('destroying local')
             self._loop.remove(self._local_sock)
             del self._fd_to_handlers[self._local_sock.fileno()]
             self._local_sock.close()
@@ -760,6 +773,7 @@ class TCPRelayHandler(object):
 class TCPRelay(object):
 
     def __init__(self, config, dns_resolver, is_local, stat_callback=None):
+        self._logging = TCPLogging()
         self._config = config
         self._is_local = is_local
         self._dns_resolver = dns_resolver
@@ -796,7 +810,7 @@ class TCPRelay(object):
             try:
                 server_socket.setsockopt(socket.SOL_TCP, 23, 5)
             except socket.error:
-                logging.warning(
+                self._logging.warning(
                     'Fast open is not available, automatically turned off')
                 self._config['fast_open'] = False
         server_socket.listen(1024)
@@ -843,7 +857,7 @@ class TCPRelay(object):
         # we just need a sorted last_activity queue and it's faster than heapq
         # in fact we can do O(1) insertion/remove so we invent our own
         if self._timeouts:
-            logging.log(shell.VERBOSE_LEVEL, 'sweeping timeouts')
+            self._logging.log(shell.VERBOSE_LEVEL, 'sweeping timeouts')
             now = time.time()
             length = len(self._timeouts)
             pos = self._timeout_offset
@@ -854,10 +868,10 @@ class TCPRelay(object):
                         break
                     else:
                         if handler.remote_address:
-                            logging.warning('timed out: %s:%d' %
-                                            handler.remote_address)
+                            self._logging.warning('timed out: %s:%d' %
+                                                  handler.remote_address)
                         else:
-                            logging.warning('timed out')
+                            self._logging.warning('timed out')
                         handler.destroy()
                         self._timeouts[pos] = None  # free memory
                         pos += 1
@@ -875,14 +889,14 @@ class TCPRelay(object):
     def handle_event(self, sock, fd, event):
         # handle events and dispatch to handlers
         if sock:
-            logging.log(shell.VERBOSE_LEVEL, 'fd %d %s', fd,
-                        eventloop.EVENT_NAMES.get(event, event))
+            self._logging.log(shell.VERBOSE_LEVEL, 'fd %d %s', fd,
+                              eventloop.EVENT_NAMES.get(event, event))
         if sock == self._server_socket:
             if event & eventloop.POLL_ERR:
                 # TODO
                 raise Exception('server_socket error')
             try:
-                logging.debug('accept')
+                self._logging.debug('accept')
                 conn = self._server_socket.accept()
                 TCPRelayHandler(self, self._fd_to_handlers,
                                 self._eventloop, conn[0], self._config,
@@ -904,7 +918,7 @@ class TCPRelay(object):
                 if handler:
                     handler.handle_event(sock, event)
             else:
-                logging.warning('poll removed fd')
+                self._logging.warning('poll removed fd')
 
     def handle_periodic(self):
         if self._closed:
@@ -912,14 +926,14 @@ class TCPRelay(object):
                 self._eventloop.remove(self._server_socket)
                 self._server_socket.close()
                 self._server_socket = None
-                logging.info('TCP port %d closed', self._listen_port)
+                self._logging.info('TCP port %d closed', self._listen_port)
             if not self._fd_to_handlers:
-                logging.info('stopping')
+                self._logging.info('stopping')
                 self._eventloop.stop()
         self._sweep_timeout()
 
     def close(self, next_tick=False):
-        logging.debug('TCP close')
+        self._logging.debug('TCP close')
         self._closed = True
         if not next_tick:
             if self._eventloop:
