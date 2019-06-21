@@ -307,10 +307,12 @@ class DbTransfer(object):
 
     @staticmethod
     def push_api_user(dt_transfer):
+        # user data traffic statistics
         i = 0
         DbTransfer.verbose_print(
             'api upload: pushing transfer statistics - start')
         users = DbTransfer.pull_api_user()
+        datalist = []
         for port in dt_transfer.keys():
             user = None
             for result in users:
@@ -332,13 +334,21 @@ class DbTransfer(object):
                 'U[%s] User ID Obtained:%s' %
                 (port, user))
             tran = str(dt_transfer[port])
-            data = {'d': tran, 'node_id': config.API_NODE_ID, 'u': '0'}
-            url = config.API_URL + '/users/' + \
-                str(user) + '/traffic?key=' + config.API_PASS
-            DbTransfer.http_post(url, data)
-            DbTransfer.verbose_print(
-                'api upload: pushing transfer statistics - done')
+            datalist.append({'d': tran, 'node_id': config.API_NODE_ID, 'user_id': user, 'u': '0'})
             i += 1
+        if config.API_BATCH_UPDATE:
+            url = config.API_URL + '/nodes/' + str(config.API_NODE_ID) + '/traffic?key=' + config.API_PASS
+            headers = {'Content-Type': 'application/json'}
+            request = Request(url=url, headers=headers, data=json.dumps(datalist))
+            response = urlopen(request)
+            response.close()
+        else:
+            for data in datalist:
+                url = config.API_URL + '/users/' + \
+                  str(data['user_id']) + '/traffic?key=' + config.API_PASS
+                DbTransfer.http_post(url, data)
+
+        DbTransfer.verbose_print('api upload: pushing transfer statistics - done')
 
         # online user count
         DbTransfer.verbose_print(

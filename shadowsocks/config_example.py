@@ -31,6 +31,9 @@ API_ENABLED = False
 
 # Shadowsocks MultiUser API Settings (NO NEED to edit if you set API_ENABLED 'False' above)
 API_URL = 'http://domain/mu'
+# Batch update is only supported by ss-panel v3 with MU API v2 implemented & ss-panel v4
+# You need to set API_URL to 'http://domain/mu/v2' if you are using ss-panel v3
+API_BATCH_UPDATE = False
 # API Key (you can find this in the .env file if you are using SS-Panel V3)
 API_PASS = 'mupass'
 API_NODE_ID = '1'
