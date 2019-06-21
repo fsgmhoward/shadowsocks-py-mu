@@ -36,40 +36,46 @@ try:
 except ImportError:
     import _thread as thread
 
-logger = logging.getLogger()
-logger.setLevel(config.LOG_LEVEL)
-consoleHandler = logging.StreamHandler(stream=sys.stdout)
-consoleHandler.setFormatter(
-    logging.Formatter(
-        config.LOG_FORMAT,
-        datefmt=config.LOG_DATE_FORMAT))
-consoleHandler.setLevel(config.LOG_LEVEL)
+if config.LOG_ENABLE:
+    logger = logging.getLogger()
+    logger.setLevel(config.LOG_LEVEL)
 
-if platform == 'linux' or platform == 'linux2':
-    with open('/proc/1/cgroup', 'rt') as ifh:
-        if 'docker' in ifh.read():
-            print('[INFO] Running inside a docker.')
-            print(
-                '[INFO] Log file config will be ignored & log will not be printed to stdout.')
-            config.LOG_FILE = 'shadowsocks.log'
+    if config.LOG_STDOUT:
+        consoleHandler = logging.StreamHandler(stream=sys.stdout)
+        consoleHandler.setFormatter(
+            logging.Formatter(
+                config.LOG_FORMAT,
+                datefmt=config.LOG_DATE_FORMAT))
+        consoleHandler.setLevel(config.LOG_LEVEL)
+        if platform == 'linux' or platform == 'linux2':
+            # Check whether the instance is running in Docker
+            with open('/proc/1/cgroup', 'rt') as ifh:
+                if 'docker' in ifh.read():
+                    print('[INFO] Running inside a docker.')
+                    print(
+                        '[INFO] Config of log file path will be ignored & log will not be printed to stdout.')
+                    config.LOG_FILE = 'shadowsocks.log'
+                else:
+                    logger.addHandler(consoleHandler)
         else:
             logger.addHandler(consoleHandler)
 
-if config.LOG_ENABLE:
-    # If enabled logging to file, add a fileHandler as well
-    if sys.version_info >= (2, 6) and platform != 'win32':
-        # If python version is >= 2.6 and it is not running on Windows, use
-        # WatchedFileHandler
-        import logging.handlers
-        fileHandler = logging.handlers.WatchedFileHandler(config.LOG_FILE)
-    else:
-        fileHandler = logging.FileHandler(config.LOG_FILE)
-    fileHandler.setFormatter(
-        logging.Formatter(
-            config.LOG_FORMAT,
-            datefmt=config.LOG_DATE_FORMAT))
-    fileHandler.setLevel(config.LOG_LEVEL)
-    logger.addHandler(fileHandler)
+    if config.LOG_FILE:
+        # If enabled logging to file, add a fileHandler as well
+        if sys.version_info >= (2, 6) and platform != 'win32':
+            # If python version is >= 2.6 and it is not running on Windows, use
+            # WatchedFileHandler
+            import logging.handlers
+            fileHandler = logging.handlers.WatchedFileHandler(config.LOG_FILE)
+        else:
+            fileHandler = logging.FileHandler(config.LOG_FILE)
+        fileHandler.setFormatter(
+            logging.Formatter(
+                config.LOG_FORMAT,
+                datefmt=config.LOG_DATE_FORMAT))
+        fileHandler.setLevel(config.LOG_LEVEL)
+        logger.addHandler(fileHandler)
+
 
 # Check whether the versions of config files match
 try:

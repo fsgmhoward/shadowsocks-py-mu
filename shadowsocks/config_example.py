@@ -16,11 +16,24 @@ CONFIG_VERSION = 2
 
 # Manyuser Interface Settings
 # ---------------------------
+# Time interval between 2 pulls from the database or API
+CHECKTIME = 30
+# Time interval between 2 pushes to the database or API
+SYNCTIME = 300
+# Timeout for MySQL connection or HTTP request (if using API)
+TIMEOUT = 30
+
 # If API is enabled, database will no longer be used
 # The known web panel that is compatible with the API is SS-Panel V3
 # Be careful and check whether your web panel supports this API BEFORE you
 # enable this feature
 API_ENABLED = False
+
+# Shadowsocks MultiUser API Settings (NO NEED to edit if you set API_ENABLED 'False' above)
+API_URL = 'http://domain/mu'
+# API Key (you can find this in the .env file if you are using SS-Panel V3)
+API_PASS = 'mupass'
+API_NODE_ID = '1'
 # Enable the ability of becoming a relay of data for other servers
 # Need support from the API endpoint, see TODO: WiKi Link
 # Modes:
@@ -35,13 +48,6 @@ API_ENABLED = False
 API_RELAY_MODE = RELAY_DISABLED
 API_RELAY_ALL_TARGET = 'relay.example.com'
 
-# Time interval between 2 pulls from the database or API
-CHECKTIME = 30
-# Time interval between 2 pushes to the database or API
-SYNCTIME = 300
-# Timeout for MySQL connection or web socket (if using API)
-TIMEOUT = 30
-
 # MySQL Database Config (NO NEED to edit if you set API_ENABLED 'True' above)
 MYSQL_HOST = 'db.example.net'
 MYSQL_PORT = 3306
@@ -49,12 +55,6 @@ MYSQL_USER = 'root'
 MYSQL_PASS = 'root'
 MYSQL_DB = 'shadowsocks'
 MYSQL_USER_TABLE = 'user'
-
-# Shadowsocks MultiUser API Settings
-API_URL = 'http://domain/mu'
-# API Key (you can find this in the .env file if you are using SS-Panel V3)
-API_PASS = 'mupass'
-API_NODE_ID = '1'
 
 
 # Manager Settings
@@ -110,14 +110,20 @@ SS_FORBIDDEN_IP = []
 
 
 # Debugging and Logging Settings
-# --------------------------
-# If SS_VERBOSE is true, traceback will be printed to STDIO when an
+# ------------------------------
+# Set LOG_ENABLE to False if you want to disable all logging (file&stdout)
+LOG_ENABLE = True
+# Set LOG_FILE to None if you want to disable file logging
+LOG_FILE = 'shadowsocks.log'
+# Set LOG_STDOUT to False if you want to disable stdout logging
+LOG_STDOUT = True
+
+# If SS_VERBOSE is true, traceback will be printed to stdout when an
 # exception is thrown
 SS_VERBOSE = False
-LOG_ENABLE = True
 # Available Log Level: logging.NOTSET|DEBUG|INFO|WARNING|ERROR|CRITICAL
 LOG_LEVEL = logging.INFO
-LOG_FILE = 'shadowsocks.log'
+
 # Set whether TCP connections and/or UDP connections are logged
 # Logging UDP connections are not recommended as log files can be very large
 LOG_TCP = True
