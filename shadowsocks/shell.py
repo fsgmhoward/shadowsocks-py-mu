@@ -23,19 +23,22 @@ import json
 import sys
 import getopt
 import logging
-import config
 import cryptor
 import traceback
 from functools import wraps
 from common import to_bytes, to_str, IPNetwork
 
+try:
+    import config
+    if config.SS_VERBOSE:
+        verbose = 1
+    else:
+        verbose = 0
+except ImportError:
+    config = None
+    verbose = 0
 
 VERBOSE_LEVEL = 5
-
-if config.SS_VERBOSE:
-    verbose = 1
-else:
-    verbose = 0
 
 
 def check_python():
